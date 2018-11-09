@@ -1,2 +1,1 @@
-web: flask run
-sim: npm start --prefix .\LINESimulator
+web: gunicorn app:app

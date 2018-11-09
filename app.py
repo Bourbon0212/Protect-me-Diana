@@ -2,7 +2,6 @@
 #########   Just Import  #########
 ##################################
 
-
 from __future__ import unicode_literals
 import errno
 import os
@@ -32,24 +31,36 @@ from linebot.models import (
     SeparatorComponent, QuickReply, QuickReplyButton
 )
 
-from class_DB import DB              #DB抓問題(.filename)
+#from class_DB import DB              #DB抓問題(.filename)
 from extract_function import *       #RE抓數字
-from carousel import *               #CT抓欄位
-
+from ct_push import *                #抓推播新的carousel template
+from confirm import *                #抓confirm template 進來
+from carousel import *               #抓caousel columns
+from confirm_push import *
+from next import *
 
 app = Flask(__name__)
 
-##################################
-##########  Good Simu   ##########
-##################################
+    ##################################
+    #########儲存使用者填答紀錄#########
+    ##################################
 
+data = {}
+result = True #True是預設為沒問題；False就改成待改進；詳情請看後續發展
+feedback = {} #使用者回饋
+EPD = 0 #絕對題號
 
-line_bot_api = LineBotApi(os.environ.get("TOKEN"), "http://localhost:8080")
+    ##################################
+    ##########  Good Simu   ##########
+    ##################################
+
+line_bot_api = None
+if os.environ.get("FLASK_ENV") == "development":
+    line_bot_api = LineBotApi(os.environ.get("TOKEN"), "http://localhost:8080")
+else:
+    line_bot_api = LineBotApi(os.environ.get("TOKEN"))
+
 handler = WebhookHandler(os.environ.get("SECRET"))
-
-
-
-
 
 @app.route("/callback", methods=['POST'])
 def callback():
@@ -73,22 +84,101 @@ def callback():
 
     return 'OK'
 
+
+
 @handler.add(MessageEvent, message=TextMessage)
 def handle_text_message(event):
     text = event.message.text
+    userid = event.source.user_id
 
+    feedback[userid] = []
+    global data
 
     if text == 'carousel':
-        carousel_template = CarouselTemplate(columns=[Quick, Normal0, Indoors0, Corridor0, Outdoors0])
-        template_message = TemplateSendMessage(alt_text='問卷選單', template=carousel_template)
-        line_bot_api.reply_message(event.reply_token, template_message)
-    else:
-        pass
+        if userid not in data:#沒有USERID的話，add key(第一次填寫的時候) 然後推處死carousel
+            data[userid] = {"Quick":0, "Normal":0, "Indoors":0, "Corridor":0, "Outdoors":0, "Answered":[]}
+            ct_container = ct_push(data, userid)  #把4類別加進來
+            ct_container.insert(0, Quick)         #還沒填過，所以加進來qc
+            carousel_template = CarouselTemplate(columns=ct_container)
+            template_message = TemplateSendMessage(alt_text='災情回覆問卷', template=carousel_template)
+            line_bot_api.reply_message(event.reply_token, template_message)
 
+        elif data[userid]['Quick'] != 0:#QC填到一半智障又打一次carousel
+            line_bot_api.reply_message(
+                event.reply_token, TextSendMessage(text="您已選擇快速檢核！請填頁面上的最後一題"))
 
+        else:
+            print(data[userid]['Normal'])
+            ct_container = ct_push(data, userid)
+            carousel_template = CarouselTemplate(columns=ct_container)
+            template_message = TemplateSendMessage(alt_text='問卷選單', template=carousel_template)
+            line_bot_api.reply_message(event.reply_token, template_message)
+
+    elif '已回覆待改進' not in text and '已回覆沒問題' not in text and 'Normal' not in text and 'Indoors' not in text and 'Corridor' not in text and 'Outdoors' not in text:
+        global result #就是要
+        global EPD
+
+        if result is False: #如果confirm templates 填待改進的話，他就會是 False
+            cat = ''
+            last = 0
+            ret = None #下一題的confirm
+            result = True #把值改回來
+
+            feedback[userid].append((EPD, text)) #紀錄(題號, 廢話)
+            data[userid]["Answered"].append(EPD)
+
+            if EPD in list(range(65,78)):
+                last = 77
+                cat = 'Quick'
+
+            elif EPD in list(range(1,13)):
+                last = 12
+                cat = 'Normal'
+
+            elif EPD in list(range(13,33)):
+                last = 32
+                cat = 'Indoors'
+
+            elif EPD in list(range(33,46)):
+                last = 45
+                cat = 'Corridor'
+
+            elif EPD in list(range(46,65)):
+                last = 64
+                cat = 'Outdoors'
+
+            if EPD == last:
+                data[userid][cat] += 1 #待改進填到最後一題+1
+                ct_container = ct_push(data, userid)
+
+                if EPD == 77 or ct_container == [Normal1, Indoors1, Corridor1, Outdoors1]:
+                    ret = [
+                        TextSendMessage(text="問卷已經填答完成咯～謝謝您的貢獻！"),
+                        StickerSendMessage(package_id=2,sticker_id=150),
+                    ]
+
+                else:
+                    carousel_template = CarouselTemplate(columns=ct_container)
+                    ret = [
+                    TemplateSendMessage(
+                        alt_text='問卷選單',
+                        template=carousel_template,
+                    )]
+
+            else:
+                data[userid][cat] += 1 #待改進沒填到最後一題+1
+                ret = [confirm(cat, data[userid][cat])]
+
+            line_bot_api.reply_message(
+                event.reply_token, [TextSendMessage(text='『' + text + '』已收到回覆')] + ret)
+    ##################################
+    ############## 貼圖 ##############
+    ##################################
 
 @handler.add(MessageEvent, message=StickerMessage)
 def handle_sticker_message(event):
+    userid = event.source.user_id
+
     line_bot_api.reply_message(
         event.reply_token,
         StickerSendMessage(
@@ -96,262 +186,78 @@ def handle_sticker_message(event):
             sticker_id=event.message.sticker_id)
     )
 
-
-##################################
-#########Confirm Template#########
-##################################
-
-data = {}
-quick = {}
-
-def confirm(cat, i):
-    db = DB()
-    questions = db.get_category(cat)
-    return   TemplateSendMessage(
-                alt_text='Confirm template',
-                template=ConfirmTemplate(
-                    text = questions[i][1],
-                    actions=[
-                        PostbackTemplateAction(
-                            label='沒問題',
-                            text='沒問題',
-                            data='no=' + str(questions[i][0]) + '&answer=OK' #questions是整份問卷第幾題 相對題號
-                        ),
-                        PostbackTemplateAction(
-                            label='待改進',
-                            text='待改進',
-                            data='no=' + str(questions[i][0]) + '&answer=NO'
-                        )
-                    ]
-                ))
-
-##################################
-##########Postback Event##########
-##################################
+    ##################################
+    ##########Postback Event#########
+    ##################################
 
 @handler.add(PostbackEvent)
 def handle_postback(event):
     userid = event.source.user_id#取得Userid
 
+    global result
+    global EPD
+
     ##################################
-    ##########  戳 CT 的時候 ##########
+    ########## 填問卷的過程 ##########
     ##################################
 
+    #QC丟問題，相對題號
     if event.postback.data == 'Quick':
-        if userid not in quick:#沒有USERID的話，add key(第一次填寫的時候)
-            quick[userid] = {"Quick":0}
-        else:
-            pass
         line_bot_api.reply_message(
-            event.reply_token, confirm("QuickCheck",quick[userid]['Quick']))
+            event.reply_token, confirm("Quick",data[userid]['Quick']))
 
-
-    #Normal丟問題，相對題號
-    elif event.postback.data == 'Normal':
-        if userid not in data:#沒有USERID的話，add key(第一次填寫的時候)
-            data[userid] = {"Normal":0, "Indoors":0, "Corridor":0, "Outdoors":0}
-        else:
-            pass
+    #四類丟問題，相對題號
+    elif event.postback.data in ['Normal', 'Indoors', 'Corridor', 'Outdoors']:
         line_bot_api.reply_message(
-            event.reply_token, confirm("Normal",data[userid]['Normal']))
+            event.reply_token, confirm_push(data, userid, event.postback.data))
 
-    #Indoors丟問題，相對題號
-    elif event.postback.data == 'Indoors':
-        if userid not in data:#沒有USERID的話，add key(第一次填寫的時候)
-            data[userid] = {"Normal":0, "Indoors":0, "Corridor":0, "Outdoors":0}
+    #戳confirm template的時候
+    else:
+        parse = extract(event.postback.data) #[0]是絕對題號；[1]是OK/NO
+        ret = None
+        cat = ''
+        last = 0
+
+        if parse[0] in list(range(65,78)):
+            last = 77
+            cat = 'Quick'
+
+        elif parse[0] in list(range(1,13)):
+            last = 12
+            cat = 'Normal'
+
+        elif parse[0] in list(range(13,33)):
+            last = 32
+            cat = 'Indoors'
+
+        elif parse[0] in list(range(33,46)):
+            last = 45
+            cat = 'Corridor'
+
+        elif parse[0] in list(range(46,65)):
+            last = 64
+            cat = 'Outdoors'
+
+        #填完該類別最後一題且最後一題是沒問題
+        if parse[0] == last and parse[1] == 'OK':
+            data[userid][cat] += 1
+            ct_container = ct_push(data, userid)
+
+            #QC填完 or 全部都填過了
+            if parse[0] == 77 or ct_container == [Normal1, Indoors1, Corridor1, Outdoors1]:
+                ret = [
+                    TextSendMessage(text="問卷已經填答完成咯～謝謝您的貢獻！"),
+                    StickerSendMessage(package_id=2,sticker_id=150),
+                ]
+
+            #有類別沒填完
+            else:
+                carousel_template = CarouselTemplate(columns=ct_container)
+                ret = TemplateSendMessage(alt_text='問卷選單', template=carousel_template)
+
+        #待改進的話，或是非該類別的最後一題
         else:
-            pass
-        line_bot_api.reply_message(
-            event.reply_token, confirm("Indoors",data[userid]['Indoors']))
+            ret, result = next(data, userid, cat, parse)
+            EPD = parse[0] if result is False else EPD
 
-    #Corridor丟問題，相對題號
-    elif event.postback.data == 'Corridor':
-        if userid not in data:#沒有USERID的話，add key(第一次填寫的時候)
-            data[userid] = {"Normal":0, "Indoors":0, "Corridor":0, "Outdoors":0}
-        else:
-            pass
-        line_bot_api.reply_message(
-            event.reply_token, confirm("Corridor",data[userid]['Corridor']))
-
-    #Outdoors丟問題，相對題號
-    elif event.postback.data == 'Outdoors':
-        if userid not in data:#沒有USERID的話，add key(第一次填寫的時候)
-            data[userid] = {"Normal":0, "Indoors":0, "Corridor":0, "Outdoors":0}
-        else:
-            pass
-        line_bot_api.reply_message(
-            event.reply_token, confirm("Outdoors",data[userid]['Outdoors']))
-
-
-        ##################################
-        ###########   計數器    ##########
-        ##################################
-
-    #從 Confirm 收到Quick Check 65-77題，自訂函數 extract
-    elif extract(event.postback.data) in list(range(65,77)):
-        quick[userid]['Quick'] += 1
-        line_bot_api.reply_message(
-            event.reply_token, confirm("QuickCheck",quick[userid]['Quick']))
-
-    #從 Confirm 收到Normal 1-11題，自訂函數 extract
-    elif extract(event.postback.data) in list(range(1,12)):
-        data[userid]['Normal'] += 1
-        line_bot_api.reply_message(
-            event.reply_token, confirm("Normal",data[userid]['Normal']))
-
-    #從 Confirm 收到Indoors 13-32題，自訂函數 extract
-    elif extract(event.postback.data) in list(range(13,32)):
-        data[userid]['Indoors'] += 1
-        line_bot_api.reply_message(
-            event.reply_token, confirm("Indoors",data[userid]['Indoors']))
-
-    #從 Confirm 收到Corridor 33-45題，自訂函數 extract
-    elif extract(event.postback.data) in list(range(33,45)):
-        data[userid]['Corridor'] += 1
-        line_bot_api.reply_message(
-            event.reply_token, confirm("Corridor",data[userid]['Corridor']))
-
-    #從 Confirm 收到Outdoors 46-64題，自訂函數 extract
-    elif extract(event.postback.data) in list(range(46,64)):
-        data[userid]['Outdoors'] += 1
-        line_bot_api.reply_message(
-            event.reply_token, confirm("Outdoors",data[userid]['Outdoors']))
-
-
-        ##################################
-        ##########重新調整CT，戳###########
-        ##################################
-
-    elif extract(event.postback.data) == 77:
-        line_bot_api.reply_message(
-            event.reply_token, TextSendMessage(text="問卷已經填答完成咯～謝謝您的貢獻！"))
-
-    #如果Confirm收到12(Normal的最後一題)的話要跳回去Ct
-    elif extract(event.postback.data) == 12:#絕對題數
-        ct_container = []
-        ct_container.append(Normal1)
-
-        if data[userid]['Indoors'] == 19:#該類題數
-            ct_container.append(Indoors1)
-        else:
-            ct_container.append(Indoors0)
-
-        if data[userid]['Corridor'] == 12:#該類題數
-            ct_container.append(Corridor1)
-        else:
-            ct_container.append(Corridor0)
-
-        if data[userid]['Outdoors'] == 18:#該類題數
-            ct_container.append(Outdoors1)
-        else:
-            ct_container.append(Outdoors0)
-
-        if ct_container == [Normal1, Indoors1, Corridor1, Outdoors1]: #所有類別均填答完成後
-            line_bot_api.reply_message(
-                event.reply_token, TextSendMessage(text="問卷已經填答完成咯～謝謝您的貢獻！"))
-        else:
-            carousel_template = CarouselTemplate(columns=ct_container)
-            template_message = TemplateSendMessage(alt_text='問卷選單', template=carousel_template)
-            #把CT推出去
-            line_bot_api.reply_message(
-                event.reply_token, template_message)
-
-
-    #如果Confirm收到32(Indoors的最後一題)的話要跳回去Ct
-    elif extract(event.postback.data) == 32:#絕對題數
-        ct_container = []
-        ct_container.append(Indoors1)
-
-        if data[userid]['Normal'] == 11:#該類題數
-            ct_container.insert(0, Normal1)
-        else:
-            ct_container.insert(0, Normal0)
-
-
-        if data[userid]['Corridor'] == 12:#該類題數
-            ct_container.insert(2, Corridor1)
-        else:
-            ct_container.insert(2, Corridor0)
-
-        if data[userid]['Outdoors'] == 18:#該類題數
-            ct_container.append(Outdoors1)
-        else:
-            ct_container.append(Outdoors0)
-
-        if ct_container == [Normal1, Indoors1, Corridor1, Outdoors1]: #所有類別均填答完成後
-            line_bot_api.reply_message(
-                event.reply_token, TextSendMessage(text="問卷已經填答完成咯～謝謝您的貢獻！"))
-        else:
-            carousel_template = CarouselTemplate(columns=ct_container)
-            template_message = TemplateSendMessage(alt_text='問卷選單', template=carousel_template)
-            #把CT推出去
-            line_bot_api.reply_message(
-                event.reply_token, template_message)
-
-
-    #如果Confirm收到45(Corridor的最後一題)的話要跳回去Ct
-    elif extract(event.postback.data) == 45:#絕對題數
-        ct_container = []
-        ct_container.append(Corridor1)
-
-        if data[userid]['Normal'] == 11:#該類題數
-            ct_container.insert(0, Normal1)
-        else:
-            ct_container.insert(0, Normal0)
-
-        if data[userid]['Indoors'] == 19:#該類題數
-            ct_container.insert(1, Indoors1)
-        else:
-            ct_container.insert(1, Indoors0)
-
-        if data[userid]['Outdoors'] == 18:#該類題數
-            ct_container.append(Outdoors1)
-        else:
-            ct_container.append(Outdoors0)
-
-        if ct_container == [Normal1, Indoors1, Corridor1, Outdoors1]: #所有類別均填答完成後
-            line_bot_api.reply_message(
-                event.reply_token, TextSendMessage(text="問卷已經填答完成咯～謝謝您的貢獻！"))
-        else:
-            carousel_template = CarouselTemplate(columns=ct_container)
-            template_message = TemplateSendMessage(alt_text='問卷選單', template=carousel_template)
-            #把CT推出去
-            line_bot_api.reply_message(
-                event.reply_token, template_message)
-
-
-    #如果Confirm收到64(Outdoors的最後一題)的話要跳回去Ct
-    elif extract(event.postback.data) == 64:#絕對題數
-        ct_container = []
-        ct_container.append(Outdoors1)
-
-        if data[userid]['Normal'] == 11:#該類題數
-            ct_container.insert(0, Normal1)
-        else:
-            ct_container.insert(0, Normal0)
-
-        if data[userid]['Indoors'] == 19:#該類題數
-            ct_container.insert(1, Indoors1)
-        else:
-            ct_container.insert(1, Indoors0)
-
-        if data[userid]['Corridor'] == 12:#該類題數
-            ct_container.insert(2, Corridor1)
-        else:
-            ct_container.insert(2, Corridor0)
-
-        if ct_container == [Normal1, Indoors1, Corridor1, Outdoors1]: #所有類別均填答完成後
-            line_bot_api.reply_message(
-                event.reply_token, TextSendMessage(text="問卷已經填答完成咯～謝謝您的貢獻！"))
-            line_bot_api.reply_message(
-                event.reply_token,
-                StickerSendMessage(
-                    package_id=event.message.package_id,
-                    sticker_id=event.message.sticker_id)
-            )
-        else:
-            carousel_template = CarouselTemplate(columns=ct_container)
-            template_message = TemplateSendMessage(alt_text='問卷選單', template=carousel_template)
-            #把CT推出去
-            line_bot_api.reply_message(
-                event.reply_token, template_message)
+        line_bot_api.reply_message(event.reply_token, ret)

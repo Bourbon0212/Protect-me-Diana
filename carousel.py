@@ -19,7 +19,7 @@ from image import *     #IM抓照片
 Quick = CarouselColumn(
                     thumbnail_image_url=image_url_QC,
                     title='Quick Check',
-                    text='這是快速檢核唷',
+                    text='若事況緊急，請直接填寫快速檢核！',
                     actions=[
                         PostbackTemplateAction(
                             label='開始填寫',
