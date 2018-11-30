@@ -23,4 +23,14 @@ def ct_push(data, userid):
     else:
         ct_container.insert(3, Outdoors0)
 
+    if len(data[userid]['Answered']) == 0:
+        ct_container.insert(0, Quick)
+    else:
+        pass
+
     return ct_container
+
+    # 功能： 判斷每一個類別是否已經填答過，決定要推甚麼carousel columns給他
+    #       如果沒有填寫過，就把Quick Check加進要推的carousel template
+    # 輸入：data, userid
+    # 輸出：CarouselTemplate
