@@ -1,4 +1,4 @@
-from carousel import *               #CT抓欄位
+from .carousel import *          #CT抓欄位
 
 def ct_push(data, userid):
     ct_container = []

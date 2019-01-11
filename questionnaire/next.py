@@ -14,7 +14,7 @@ from linebot.models import (
     SeparatorComponent, QuickReply, QuickReplyButton
 )
 
-from confirm import *                #抓confirm template 進來
+from .confirm import confirm    #抓confirm template 進來
 
 def next(data, userid, cat, parse):
 

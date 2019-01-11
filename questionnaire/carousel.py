@@ -14,7 +14,7 @@ from linebot.models import (
     SeparatorComponent, QuickReply, QuickReplyButton
 )
 
-from image import *     #IM抓照片
+from .image import *     #IM抓照片
 
 Quick = CarouselColumn(
                     thumbnail_image_url=image_url_QC,

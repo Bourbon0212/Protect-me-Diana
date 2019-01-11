@@ -12,9 +12,7 @@ from linebot.models import (
     TextComponent, SpacerComponent, IconComponent, ButtonComponent,
     SeparatorComponent, QuickReply, QuickReplyButton
 )
-from class_DB import DB              #DB抓問題
-
-from class_DB import DB              #DB抓問題
+from .class_DB import DB            #DB抓問題
 
 def takeFirst(elem):
     return elem[0]
