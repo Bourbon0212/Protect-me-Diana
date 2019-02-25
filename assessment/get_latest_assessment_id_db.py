@@ -1,18 +1,15 @@
-import sqlite3
-
 # 抓最新的assessment id
 
-def get_latest_assessment_id_db():
+def get_latest_assessment_id_db(db):
 
-    conn = sqlite3.connect('diana.db')
-    c = conn.cursor()
+    cur = db.conn.cursor()
 
-    cursor = c.execute('SELECT * FROM assessment')
-
-    result = cursor.fetchall()
+    cur.execute('SELECT * FROM assessment')
+    result = cur.fetchall()
+    
     ret = result[len(result) - 1]
 
-    conn.commit()
-    conn.close()
-
+    db.conn.commit()
+    cur.close()
+    
     return ret

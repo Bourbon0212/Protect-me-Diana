@@ -1,23 +1,11 @@
 from linebot.models import (
-    MessageEvent, TextMessage, TextSendMessage,
-    SourceUser, SourceGroup, SourceRoom,
-    TemplateSendMessage, ConfirmTemplate, MessageAction,
-    ButtonsTemplate, ImageCarouselTemplate, ImageCarouselColumn, URIAction,
-    PostbackAction, DatetimePickerAction, PostbackTemplateAction,
-    CameraAction, CameraRollAction, LocationAction,
-    CarouselTemplate, CarouselColumn, PostbackEvent,
-    StickerMessage, StickerSendMessage, LocationMessage, LocationSendMessage,
-    ImageMessage, VideoMessage, AudioMessage, FileMessage,
-    UnfollowEvent, FollowEvent, JoinEvent, LeaveEvent, BeaconEvent,
-    FlexSendMessage, BubbleContainer, ImageComponent, BoxComponent,
-    TextComponent, SpacerComponent, IconComponent, ButtonComponent,
-    SeparatorComponent, QuickReply, QuickReplyButton
+    TextSendMessage,
 )
 
 from .confirm import confirm            #抓confirm template 進來
 
 
-def confirm_push(data, userid, cat):
+def confirm_push(data, userid, cat, db):
 
         if data[userid]['Quick'] != 0:#QC填到一半 智障又打一次carousel
             return TextSendMessage(text="您已選擇快速檢核！請填頁面上的最後一題")
@@ -26,10 +14,10 @@ def confirm_push(data, userid, cat):
             if cat == 'Quick': #不讓她劈腿(換成QC)
                  return TextSendMessage(text="您已選擇正規問卷！請填頁面上的最後一題")
             else:
-                return confirm(cat ,data[userid][cat])
+                return confirm(cat ,data[userid][cat], db)
 
         else:
-            return confirm(cat ,data[userid][cat])
+            return confirm(cat ,data[userid][cat], db)
 
     # 功能： 回傳confirm template
     #       條件───1. 不讓他填Quick Check填到一半換類別

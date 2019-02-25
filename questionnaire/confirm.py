@@ -1,25 +1,12 @@
 from linebot.models import (
-    MessageEvent, TextMessage, TextSendMessage,
-    SourceUser, SourceGroup, SourceRoom,
-    TemplateSendMessage, ConfirmTemplate, MessageAction,
-    ButtonsTemplate, ImageCarouselTemplate, ImageCarouselColumn, URIAction,
-    PostbackAction, DatetimePickerAction, PostbackTemplateAction,
-    CameraAction, CameraRollAction, LocationAction,
-    CarouselTemplate, CarouselColumn, PostbackEvent,
-    StickerMessage, StickerSendMessage, LocationMessage, LocationSendMessage,
-    ImageMessage, VideoMessage, AudioMessage, FileMessage,
-    UnfollowEvent, FollowEvent, JoinEvent, LeaveEvent, BeaconEvent,
-    FlexSendMessage, BubbleContainer, ImageComponent, BoxComponent,
-    TextComponent, SpacerComponent, IconComponent, ButtonComponent,
-    SeparatorComponent, QuickReply, QuickReplyButton
+    TemplateSendMessage, ConfirmTemplate, PostbackTemplateAction,
 )
 
-from .class_DB import DB             #DB抓問題
+from .get_question_db import get_category             #DB抓問題
 
 
-def confirm(cat, i):
-    db = DB()
-    questions = db.get_category(cat)
+def confirm(cat, i, db):
+    questions = get_category(cat, db)
     #這裡i 不用 -= 1 是因為data[userid][cat]是從 0開始計算
     return   TemplateSendMessage(
                 alt_text='Confirm template',
@@ -43,22 +30,3 @@ def confirm(cat, i):
     # 輸入：1.cat ： 類別
     #      2. i  ： 絕對題號
     # 輸出：ConfirmTemplate with question
-
-def account_confirm():
-    return   TemplateSendMessage(
-                alt_text='Confirm template',
-                template=ConfirmTemplate(
-                    text = "你已經設定過帳戶資訊囉，請問您要重新設定嗎？",
-                    actions=[
-                        PostbackTemplateAction(
-                            label='是的',
-                            # text="我要設定帳號",  #給使用者看相對題號
-                            data='account_reset' #questions是整份問卷第幾題 絕對題號
-                        ),
-                        PostbackTemplateAction(
-                            label='不用',
-                            text="不用，謝謝", #給使用者看相對題號
-                            data='account_remain'
-                        )
-                    ]
-                ))

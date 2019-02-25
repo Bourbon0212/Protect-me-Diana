@@ -1,25 +1,14 @@
 from linebot.models import (
-    MessageEvent, TextMessage, TextSendMessage,
-    TemplateSendMessage, ConfirmTemplate, MessageAction,
-    ButtonsTemplate, ImageCarouselTemplate, ImageCarouselColumn, URIAction,
-    PostbackAction, DatetimePickerAction, PostbackTemplateAction,
-    CameraAction, CameraRollAction, LocationAction,
-    CarouselTemplate, CarouselColumn, PostbackEvent,
-    StickerMessage, StickerSendMessage, LocationMessage, LocationSendMessage,
-    ImageMessage, VideoMessage, AudioMessage, FileMessage,
-    UnfollowEvent, FollowEvent, JoinEvent, LeaveEvent, BeaconEvent,
-    FlexSendMessage, BubbleContainer, ImageComponent, BoxComponent,
-    TextComponent, SpacerComponent, IconComponent, ButtonComponent,
-    SeparatorComponent, QuickReply, QuickReplyButton
+    TextSendMessage, StickerSendMessage,
+    TemplateSendMessage, ConfirmTemplate, PostbackTemplateAction,
 )
-from .class_DB import DB            #DB抓問題
+from .get_question_db import get_all            #DB抓問題
 
 def takeFirst(elem):
     return elem[0]
 
-def tempview(output):
-    db = DB()
-    questions = db.get_all()
+def tempview(output, db):
+    questions = get_all(db)
     render = []
 
     output.sort(key=takeFirst)
@@ -42,10 +31,10 @@ def tempview(output):
     # 輸入：output = feedback[userid]
     # 輸出：str (他所回覆要待改進的內容)
 
-def tempview_confirm(output):
+def tempview_confirm(output, db):
     ret = [
         StickerSendMessage(package_id=2,sticker_id=150),
-        TextSendMessage(text=tempview(output)),
+        TextSendMessage(text=tempview(output, db)),
         TemplateSendMessage(
                     alt_text='Confirm template',
                     template=ConfirmTemplate(
